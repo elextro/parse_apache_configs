@@ -5,16 +5,16 @@ from pyparsing import Word, oneOf, White, OneOrMore, alphanums, LineEnd, \
 # a conditional expression. The reason this is done
 # is so that a tag with the ">" operator in the
 # arguments will parse correctly.
-OPERAND = Word(alphanums + "." + '"' + '/-' + "*:^_![]?$%@)(#=`" + '\\')
+OPERAND = Word(alphanums + "." + '"' + '/-' + "*:^_|![]?$%@)(#=`'}{" + '\\')
 OPERATOR = oneOf(["<=", ">=", "==", "!=", "<", ">", "~"], useRegex=False)
-EXPRESSION_TAG = OPERAND + White() + OPERATOR + White() + OPERAND
+EXPRESSION_TAG = Word(alphanums) + White() + OPERAND + White() + OPERATOR + White() + OPERAND
 
 # LITERAL_TAG will match tags that do not have
 # a conditional expression. So any other tag
 # with arguments that don't contain OPERATORs
 LITERAL_TAG = OneOrMore(Word(
     alphanums + '*:' + '/' + '"-' + '.' + " " + "^" + "_" + "!" + "[]?$"
-    + "'" + '\\'
+    + "'" + '\\' + "*:^_|![]?$%@)(#=`'}{"
 ))
 # Will match the start of any tag
 TAG_START_GRAMMAR = Group(Literal("<") + (EXPRESSION_TAG | LITERAL_TAG)
