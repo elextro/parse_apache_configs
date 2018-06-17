@@ -27,9 +27,8 @@ TAG_END_GRAMMAR = Group(Literal("</") + Word(alphanums) + Literal(">")
 # Will match any directive. We are performing
 # a simple parse by matching the directive on
 # the left, and everything else on the right.
-ANY_DIRECTIVE = Group(Word(alphanums) + Suppress(White())
+ANY_DIRECTIVE = Group(Word(alphanums, alphanums+'_-@.') + Suppress(White())
                       + Word(printables + "     ") + LineEnd())
-
 
 COMMENT = Group(
     (Literal("#") + LineEnd()) ^
