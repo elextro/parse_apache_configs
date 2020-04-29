@@ -47,7 +47,47 @@ CONFIG_FILE = OneOrMore(LINE)
 
 
 class Node(list):
-    pass
+    def get_from_path(self, path):
+        """
+        Return a sub-node from a path of nested tags
+        """
+        if path is None or len(path) == 0:
+            return self
+
+        tag = path[0]
+        for item in self:
+            if isinstance(item, NestedTags):
+                if item.open_tag.rstrip() == tag:
+                    return item.get_from_path(path[1:])
+
+        raise KeyError("Invalid tag path")
+
+
+    def add_or_update_directive(self, path, directive_name, directive_arguments):
+        """
+        Add/override a directive in the apache config file.
+        path must be a list of tags, e.g. ["<VirtualHost *:80>", "<Directory /var/www>"],
+            or an empty list/None in case you want to change something at the root of your file
+        Returns whether something was changed
+        Throws in case the path is invalid
+        """
+        node = self.get_from_path(path)
+
+        for item in node:
+            if not isinstance(item, Directive):
+                continue
+            else:
+                if item.name == directive_name:
+                    # We have found our item, let's update it
+                    if item.args == directive_arguments:
+                        return False # Nothing was changed
+                    item.args = directive_arguments
+                    return True
+
+        # The item is not present at the given path. Let's add it
+        node.append(Directive(directive_name, directive_arguments))
+        return True
+
 
 class Directive(Node):
     def __init__(self, name, args):
@@ -180,58 +220,7 @@ class ParseApacheConfig:
 
         return config_string
 
-    def add_directive(self, nested_list_conf, directive_name,
-                      directive_arguments, *path):
-        """
-        This method adds/overrides a directivie in the apache config file.
-        """
 
-        # Variables
-        if len(path) == 0:
-            tag_path = []
-        else:
-            tag_path = []
-            for string in path:
-                tag_path.append(string)
-
-        stack = []
-        stack.append(nested_list_conf)
-        # A dummy nested list so we don't modify the orignal
-        # as we are iterating through the list
-        dummy_nested_list_conf = list(nested_list_conf)
-
-        # Iterating through the list
-        while(len(tag_path) > 0):
-
-            # If we iterate through the entire list and tag_path is still
-            # greater than zero, then the tag is not there.
-            if len(dummy_nested_list_conf) == 0:
-                raise Exception("Y U GIVE INCORRECT PATH!?")
-
-            # Pop the first element off the stack
-            current = dummy_nested_list_conf.pop(0)
-            if isinstance(current, NestedTags):
-                if current.open_tag.rstrip() == tag_path[0]:
-                    # We are only conerned with the current block of the config
-                    dummy_nested_list_conf = current
-                    stack.append(current)
-                    tag_path.pop(0)
-
-        directive = Directive(directive_name, directive_arguments)
-        # Checking to see if directive is already there.
-        # If it is, override it.
-        for directive_object in stack[-1]:
-            if not isinstance(directive_object, Directive):
-                continue
-            else:
-                if directive_object.name == directive_name:
-                    directive_object.args = directive_arguments
-                    return nested_list_conf
-        # If we have reached this point, the directive is not in the
-        # config file and we can add it.
-        stack[-1].append(directive)
-
-        return nested_list_conf
 
     def _is_open_tag(self, tokenized_line):
         """
