@@ -46,10 +46,8 @@ LINE = (TAG_END_GRAMMAR ^ TAG_START_GRAMMAR ^ ANY_DIRECTIVE
 CONFIG_FILE = OneOrMore(LINE)
 
 
-class Node():
-    def __init__(self, index):
-        self.index = index
-
+class Node(list):
+    pass
 
 class Directive(Node):
     def __init__(self, name, args):
@@ -62,17 +60,17 @@ class Comment(Node):
         self.comment_string = comment_string
 
 
-class BlankLine():
+class BlankLine(Node):
     pass
 
 
-class NestedTags(list):
+class NestedTags(Node):
     def __init__(self, open_tag, close_tag):
         self.open_tag = open_tag
         self.close_tag = close_tag
 
 
-class RootNode(list):
+class RootNode(Node):
     pass
 
 
