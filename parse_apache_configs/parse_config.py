@@ -105,6 +105,39 @@ class Node(list):
         node.append(NestedTags(open_tag, close_tag))
         return True
 
+    def get_apache_config(self, indentation=0):
+        """
+        This method returns the apache config contents as a string
+        given the nested list returned by parse_config
+        """
+        config_string = ""
+
+        if isinstance(self, Directive):
+            config_string += (
+                "\t"*indentation + self.name + " "
+                + self.args + "\n"
+            )
+        if isinstance(self, Comment):
+            config_string += (
+                "\t"*indentation + "#" + self.comment_string
+                + "\n"
+            )
+        if isinstance(self, BlankLine):
+            config_string += "\n"
+
+        if isinstance(self, NestedTags):
+            config_string += "\t" * indentation + self.open_tag + "\n"
+
+        for item in self:
+            new_indent = indentation if isinstance(self, RootNode) else indentation+1
+            config_string += item.get_apache_config(new_indent)
+
+        if isinstance(self, NestedTags):
+            config_string += "\t" * indentation + self.close_tag + "\n"
+
+        return config_string
+
+
 class Directive(Node):
     def __init__(self, name, args):
         self.name = name
@@ -189,54 +222,6 @@ class ParseApacheConfig:
                 config_stack[-1].append(block)
 
         return config_stack[-1]
-
-    def get_apache_config(self, nested_list_conf):
-        """
-        This method returns the apache config contents as a string
-        given the nested list returned by parse_config
-        """
-        stack = []
-        stack.append(nested_list_conf)
-        depth = -1
-        config_string = ""
-        while(len(stack) > 0):
-            current = stack[-1]
-            if isinstance(current, Directive):
-                config_string += (
-                    "\t"*depth + current.name + " "
-                    + current.args + "\n"
-                )
-                stack.pop()
-                continue
-            if isinstance(current, Comment):
-                config_string += (
-                    "\t"*depth + "#" + current.comment_string
-                    + "\n"
-                )
-                stack.pop()
-                continue
-            if isinstance(current, BlankLine):
-                config_string += "\n"
-                stack.pop()
-                continue
-
-            if hasattr(current, 'should_close'):
-                depth -= 1
-                if isinstance(current, NestedTags):
-                    config_string += "\t" * depth + current.close_tag + "\n"
-                stack.pop()
-                continue
-
-            if isinstance(current, NestedTags):
-                config_string += "\t" * depth + current.open_tag + "\n"
-
-            current.should_close = True
-            depth += 1
-            stack.extend(reversed(current))
-
-        return config_string
-
-
 
     def _is_open_tag(self, tokenized_line):
         """

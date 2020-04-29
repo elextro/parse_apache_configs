@@ -77,6 +77,5 @@ To convert the apache_config object into a printable string:
 
 .. code-block:: python
 
-    apache_config_string = apache_parse_obj.get_apache_config(apache_config)
-    print apache_config_string
+    print apache_config.get_apache_config()
 
