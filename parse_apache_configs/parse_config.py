@@ -88,6 +88,22 @@ class Node(list):
         node.append(Directive(directive_name, directive_arguments))
         return True
 
+    def add_nested_tags(self, path, open_tag, close_tag):
+        """
+        Add a nested tag into the config
+        Returns true on success, false in case a tag already existed at this path
+        Throws in case of an invalid path
+        """
+        node = self.get_from_path(path)
+        for item in node:
+            if not isinstance(item, NestedTags):
+                continue
+            else:
+                if item.open_tag == open_tag:
+                    return False
+        # The item is not present at the given path. Let's add it
+        node.append(NestedTags(open_tag, close_tag))
+        return True
 
 class Directive(Node):
     def __init__(self, name, args):

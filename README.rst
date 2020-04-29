@@ -65,6 +65,13 @@ To override the "Order" directive under <Directory "/var/www/example.org">, the 
 
     apache_config.add_or_update_directive(["<VirtualHost *:80>", "<Directory "/var/www/example.org">"], "Order", "deny,allow")
 
+To add a tag into the config, you can use add_nested_tags.
+Here as well, use [] or None for the path in case you want to change a tag at the root of your config
+
+.. code-block:: python
+
+    apache_config.add_nested_tags([], "<Tag Arg1 Arg2>", "</Tag>")
+
 
 To convert the apache_config object into a printable string:
 
