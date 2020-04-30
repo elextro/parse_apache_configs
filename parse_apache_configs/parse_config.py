@@ -105,6 +105,36 @@ class Node(list):
         node.append(NestedTags(open_tag, close_tag))
         return True
 
+    def remove_node(self, path, directive_name=None, nested_tag_open_tag=None):
+        """
+        This method removes a node under path.
+        Pass a directive_name in case you want to remove a directive
+        Pass nested_tag_open_tag in case you want to remove a nested tag
+        Returns true on success
+        Throws in case no such node is found
+        """
+        if(directive_name is None and nested_tag_open_tag is None):
+            raise KeyError("No argument was passed")
+        if(not directive_name is None and not nested_tag_open_tag is None):
+            raise KeyError("Pass only one argument")
+
+        parent = self.get_from_path(path)
+        for item in parent:
+            if directive_name is not None:
+                if isinstance(item, Directive):
+                    if item.name == directive_name:
+                        parent.remove(item)
+                        return True
+
+            if nested_tag_open_tag is not None:
+                if isinstance(item, NestedTags):
+                    if item.open_tag == nested_tag_open_tag:
+                        parent.remove(item)
+                        return True
+
+        raise KeyError("No such node")
+
+
     def get_apache_config(self, indentation=0):
         """
         This method returns the apache config contents as a string
