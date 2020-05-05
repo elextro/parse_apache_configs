@@ -5,16 +5,16 @@ from pyparsing import Word, oneOf, White, OneOrMore, alphanums, LineEnd, \
 # a conditional expression. The reason this is done
 # is so that a tag with the ">" operator in the
 # arguments will parse correctly.
-OPERAND = Word(alphanums + "." + '"' + '/-' + "*:^_![]?$%@)(#=`" + '\\')
+OPERAND = Word(alphanums + "." + '"' + '/-' + "*:^_|![]?$%@)(#=`'}{&+~" + '\\')
 OPERATOR = oneOf(["<=", ">=", "==", "!=", "<", ">", "~"], useRegex=False)
-EXPRESSION_TAG = OPERAND + White() + OPERATOR + White() + OPERAND
+EXPRESSION_TAG = Word(alphanums) + White() + OPERAND + White() + OPERATOR + White() + OPERAND
 
 # LITERAL_TAG will match tags that do not have
 # a conditional expression. So any other tag
 # with arguments that don't contain OPERATORs
 LITERAL_TAG = OneOrMore(Word(
     alphanums + '*:' + '/' + '"-' + '.' + " " + "^" + "_" + "!" + "[]?$"
-    + "'" + '\\'
+    + "'" + '\\' + "*:^_|![]?$%@)(#=`'}{&+~"  
 ))
 # Will match the start of any tag
 TAG_START_GRAMMAR = Group(Literal("<") + (EXPRESSION_TAG | LITERAL_TAG)
@@ -27,9 +27,8 @@ TAG_END_GRAMMAR = Group(Literal("</") + Word(alphanums) + Literal(">")
 # Will match any directive. We are performing
 # a simple parse by matching the directive on
 # the left, and everything else on the right.
-ANY_DIRECTIVE = Group(Word(alphanums) + Suppress(White())
+ANY_DIRECTIVE = Group(Word(alphanums+'_-@.') + Suppress(White())
                       + Word(printables + "     ") + LineEnd())
-
 
 COMMENT = Group(
     (Literal("#") + LineEnd()) ^
@@ -47,9 +46,126 @@ LINE = (TAG_END_GRAMMAR ^ TAG_START_GRAMMAR ^ ANY_DIRECTIVE
 CONFIG_FILE = OneOrMore(LINE)
 
 
-class Node():
-    def __init__(self, index):
-        self.index = index
+class Node(list):
+    def get_from_path(self, path):
+        """
+        Return a sub-node from a path of nested tags
+        """
+        if path is None or len(path) == 0:
+            return self
+
+        tag = path[0]
+        for item in self:
+            if isinstance(item, NestedTags):
+                if item.open_tag.rstrip() == tag:
+                    return item.get_from_path(path[1:])
+
+        raise KeyError("Invalid tag path")
+
+
+    def add_or_update_directive(self, path, directive_name, directive_arguments):
+        """
+        Add/override a directive in the apache config file.
+        path must be a list of tags, e.g. ["<VirtualHost *:80>", "<Directory /var/www>"],
+            or an empty list/None in case you want to change something at the root of your file
+        Returns whether something was changed
+        Throws in case the path is invalid
+        """
+        node = self.get_from_path(path)
+
+        for item in node:
+            if not isinstance(item, Directive):
+                continue
+            else:
+                if item.name == directive_name:
+                    # We have found our item, let's update it
+                    if item.args == directive_arguments:
+                        return False # Nothing was changed
+                    item.args = directive_arguments
+                    return True
+
+        # The item is not present at the given path. Let's add it
+        node.append(Directive(directive_name, directive_arguments))
+        return True
+
+    def add_nested_tags(self, path, open_tag, close_tag):
+        """
+        Add a nested tag into the config
+        Returns true on success, false in case a tag already existed at this path
+        Throws in case of an invalid path
+        """
+        node = self.get_from_path(path)
+        for item in node:
+            if not isinstance(item, NestedTags):
+                continue
+            else:
+                if item.open_tag == open_tag:
+                    return False
+        # The item is not present at the given path. Let's add it
+        node.append(NestedTags(open_tag, close_tag))
+        return True
+
+    def remove_node(self, path, directive_name=None, nested_tag_open_tag=None):
+        """
+        This method removes a node under path.
+        Pass a directive_name in case you want to remove a directive
+        Pass nested_tag_open_tag in case you want to remove a nested tag
+        Returns true on success
+        Throws in case no such node is found
+        """
+        if(directive_name is None and nested_tag_open_tag is None):
+            raise KeyError("No argument was passed")
+        if(not directive_name is None and not nested_tag_open_tag is None):
+            raise KeyError("Pass only one argument")
+
+        parent = self.get_from_path(path)
+        for item in parent:
+            if directive_name is not None:
+                if isinstance(item, Directive):
+                    if item.name == directive_name:
+                        parent.remove(item)
+                        return True
+
+            if nested_tag_open_tag is not None:
+                if isinstance(item, NestedTags):
+                    if item.open_tag == nested_tag_open_tag:
+                        parent.remove(item)
+                        return True
+
+        raise KeyError("No such node")
+
+
+    def get_apache_config(self, indentation=0):
+        """
+        This method returns the apache config contents as a string
+        given the nested list returned by parse_config
+        """
+        config_string = ""
+
+        if isinstance(self, Directive):
+            config_string += (
+                "\t"*indentation + self.name + " "
+                + self.args + "\n"
+            )
+        if isinstance(self, Comment):
+            config_string += (
+                "\t"*indentation + "#" + self.comment_string
+                + "\n"
+            )
+        if isinstance(self, BlankLine):
+            config_string += "\n"
+
+        if isinstance(self, NestedTags):
+            config_string += "\t" * indentation + self.open_tag + "\n"
+
+        for item in self:
+            new_indent = indentation if isinstance(self, RootNode) else indentation+1
+            config_string += item.get_apache_config(new_indent)
+
+        if isinstance(self, NestedTags):
+            config_string += "\t" * indentation + self.close_tag + "\n"
+
+        return config_string
 
 
 class Directive(Node):
@@ -63,17 +179,17 @@ class Comment(Node):
         self.comment_string = comment_string
 
 
-class BlankLine():
+class BlankLine(Node):
     pass
 
 
-class NestedTags(list):
+class NestedTags(Node):
     def __init__(self, open_tag, close_tag):
         self.open_tag = open_tag
         self.close_tag = close_tag
 
 
-class RootNode(list):
+class RootNode(Node):
     pass
 
 
@@ -136,105 +252,6 @@ class ParseApacheConfig:
                 config_stack[-1].append(block)
 
         return config_stack[-1]
-
-    def get_apache_config(self, nested_list_conf):
-        """
-        This method returns the apache config contents as a string
-        given the nested list returned by parse_config
-        """
-        stack = []
-        stack.append(nested_list_conf)
-        depth = -1
-        config_string = ""
-        while(len(stack) > 0):
-            current = stack[-1]
-            if isinstance(current, Directive):
-                config_string += (
-                    "\t"*depth + current.name + " "
-                    + current.args + "\n"
-                )
-                stack.pop()
-                continue
-            if isinstance(current, Comment):
-                config_string += (
-                    "\t"*depth + "#" + current.comment_string
-                    + "\n"
-                )
-                stack.pop()
-                continue
-            if isinstance(current, BlankLine):
-                config_string += "\n"
-                stack.pop()
-                continue
-
-            if hasattr(current, 'should_close'):
-                depth -= 1
-                if isinstance(current, NestedTags):
-                    config_string += "\t" * depth + current.close_tag + "\n"
-                stack.pop()
-                continue
-
-            if isinstance(current, NestedTags):
-                config_string += "\t" * depth + current.open_tag + "\n"
-
-            current.should_close = True
-            depth += 1
-            stack.extend(reversed(current))
-
-        return config_string
-
-    def add_directive(self, nested_list_conf, directive_name,
-                      directive_arguments, *path):
-        """
-        This method adds/overrides a directivie in the apache config file.
-        """
-
-        # Variables
-        if len(path) == 0:
-            tag_path = []
-        else:
-            tag_path = []
-            for string in path:
-                tag_path.append(string)
-
-        stack = []
-        stack.append(nested_list_conf)
-        # A dummy nested list so we don't modify the orignal
-        # as we are iterating through the list
-        dummy_nested_list_conf = list(nested_list_conf)
-
-        # Iterating through the list
-        while(len(tag_path) > 0):
-
-            # If we iterate through the entire list and tag_path is still
-            # greater than zero, then the tag is not there.
-            if len(dummy_nested_list_conf) == 0:
-                raise Exception("Y U GIVE INCORRECT PATH!?")
-
-            # Pop the first element off the stack
-            current = dummy_nested_list_conf.pop(0)
-            if isinstance(current, NestedTags):
-                if current.open_tag.rstrip() == tag_path[0]:
-                    # We are only conerned with the current block of the config
-                    dummy_nested_list_conf = current
-                    stack.append(current)
-                    tag_path.pop(0)
-
-        directive = Directive(directive_name, directive_arguments)
-        # Checking to see if directive is already there.
-        # If it is, override it.
-        for directive_object in stack[-1]:
-            if not isinstance(directive_object, Directive):
-                continue
-            else:
-                if directive_object.name == directive_name:
-                    directive_object.args = directive_arguments
-                    return nested_list_conf
-        # If we have reached this point, the directive is not in the
-        # config file and we can add it.
-        stack[-1].append(directive)
-
-        return nested_list_conf
 
     def _is_open_tag(self, tokenized_line):
         """

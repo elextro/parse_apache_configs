@@ -15,7 +15,7 @@ Main Functions
 To use:
 
 .. code-block:: python
-  
+
     from parse_apache_configs import parse_config
 
 Parse the apache config via file path, and return a python object representation:
@@ -38,13 +38,13 @@ To add or override an existing directive and return the result:
 
 .. code-block:: python
 
-    apache_config = apache_parse_obj.add_directive(apache_config, "SomeDirectiveName", "SomeDirectiveArguments", "<VirtualHost *:80>")
-
+    apache_config.add_or_update_directive(["<VirtualHost *:80>"], "SomeDirectiveName", "SomeDirectiveArguments"):
 
 The code above will add the line "SomeDirectiveName SomeDirectiveArguments" under <VirtualHost \*:80>. If the directive
 is already there, then it's arguments will be overridden.
-Keep in mind that directives in nested tags can also be added/overridden, but their full "path" must be fed into
-add_directive. For example, given the following apache file:
+To add/override directives at the root of the config, pass None (or []) for the "path".
+To add/override directives in nested tags, pass their full "path" into add_or_update_directive.
+For example, given the following apache file:
 
 .. code-block:: apache
 
@@ -59,17 +59,23 @@ add_directive. For example, given the following apache file:
       </Directory>
     </VirtualHost>
 
-To override the "Order" directive under <Directory "/var/www/example.org">, the invocation to add_directive would look like this:
+To override the "Order" directive under <Directory "/var/www/example.org">, the invocation to add_or_update_directive would look like this:
 
 .. code-block:: python
 
-    apache_config = apache_parse_obj.add_directive(apache_config, "Order", "deny,allow", "<VirtualHost *:80>", "<Directory "/var/www/example.org">")
+    apache_config.add_or_update_directive(["<VirtualHost *:80>", "<Directory "/var/www/example.org">"], "Order", "deny,allow")
+
+To add a tag into the config, you can use add_nested_tags.
+Here as well, use [] or None for the path in case you want to change a tag at the root of your config
+
+.. code-block:: python
+
+    apache_config.add_nested_tags([], "<Tag Arg1 Arg2>", "</Tag>")
 
 
 To convert the apache_config object into a printable string:
 
 .. code-block:: python
 
-    apache_config_string = apache_parse_obj.get_apache_config(apache_config)
-    print apache_config_string
+    print apache_config.get_apache_config()
 
